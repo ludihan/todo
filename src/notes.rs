@@ -23,7 +23,7 @@ fn read_file() -> Vec<String> {
 
 fn write_notes(notes: &[String]) -> ExitCode {
     let path = get_path();
-    let result = fs::write(path, notes.join("\n"));
+    let result = fs::write(path, notes.join("\n") + "\n");
     if let Err(_) = result {
         eprintln!("couldn't write to file");
         ExitCode::FAILURE
