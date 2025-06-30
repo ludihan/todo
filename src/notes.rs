@@ -38,11 +38,11 @@ pub(crate) fn list() -> ExitCode {
         println!("you don't have any notes");
         return ExitCode::SUCCESS;
     }
-    let width = ((notes.len() as f64).log10()+1.0) as usize;
+    let width = ((notes.len() as f64).log10() + 1.0) as usize;
     notes
         .iter()
         .enumerate()
-        .for_each(|(i, n)| println!("{:<width$}: {n}", i + 1, width=width));
+        .for_each(|(i, n)| println!("{:<width$}: {n}", i + 1, width = width));
     ExitCode::SUCCESS
 }
 
@@ -178,11 +178,7 @@ fn parse_indices(args: &[String], inclusive: bool) -> Option<Vec<usize>> {
     match parsed_indices {
         Ok(vec) => {
             if let Some(biggest) = vec.iter().max() {
-                if if inclusive {
-                    *biggest > notes.len() + 1
-                } else {
-                    *biggest > notes.len()
-                } {
+                if *biggest > notes.len() + usize::from(inclusive) {
                     eprintln!("index {biggest} is bigger than the file");
                     None
                 } else {
