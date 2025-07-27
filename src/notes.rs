@@ -203,16 +203,24 @@ fn parse_indices(args: &[String], inclusive: bool) -> Option<Vec<usize>> {
 const HELP_MESSAGE: &str = "\
 todo is a tool for quick reminders and taking notes.
 options:
-  l    List all notes.
+  l
+    List all notes.
+
   i <value> [index]
-       Insert a note. If an index is provided, writes the note at that position.
+    Insert a note at a given index.
+    If an index is not provided, appends note at the end of the list.
+
   c <value> [index]
-       Change the last note from the database, if an index is provided, changes
-       the note at that index.
+    Change a note at a given index.
+    If an index is not provided, changes the last note.
+
   d [index...]
-       Delete the last note from the list. Optionally, accepts a list of indices
-       to delete.
-  h    Show this help message.
-  e    Edit your notes using a text editor, uses the VISUAL and EDITOR
-       environment variables.\
+    Delete notes at given indices.
+    If no indices are provided, deletes the last note from the list.
+  h
+    Show this help message.
+
+  e
+    Edit your notes using a text editor.
+    Will try to use the VISUAL and EDITOR environment variables.\
 ";
