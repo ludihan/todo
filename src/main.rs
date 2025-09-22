@@ -1,21 +1,16 @@
-mod notes;
+mod cli;
 
-use std::process::ExitCode;
+use std::{
+    env::{self},
+    process::ExitCode,
+};
 
 fn main() -> ExitCode {
-    let mut args = std::env::args();
-    args.next();
-    let cmd = args.next().unwrap_or("h".to_string());
-
-    match cmd.as_str() {
-        "l" => notes::list(),
-        "i" => notes::insert(args),
-        "c" => notes::change(args),
-        "d" => notes::delete(args),
-        "e" => notes::edit(),
-        "h" => notes::help(),
-        _ => {
-            eprintln!("{cmd} is not a valid command");
+    let args = env::args();
+    match cli::Cli::new(args) {
+        Ok(o) => o.execute(),
+        Err(e) => {
+            eprintln!("{e}");
             ExitCode::FAILURE
         }
     }
