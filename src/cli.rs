@@ -140,7 +140,11 @@ impl Cli {
                     return ExitCode::FAILURE;
                 }
 
-                file = lines.join("\n") + "\n";
+                if lines.is_empty() {
+                    file = lines.join("\n");
+                } else {
+                    file = lines.join("\n") + "\n";
+                }
                 if let Err(e) = fs::write(&self.target, file) {
                     eprintln!("failed to write file: {e}");
                     ExitCode::FAILURE
@@ -150,8 +154,13 @@ impl Cli {
                 }
             }
             Some(CliCommand::DeleteFile) => {
-                fs::remove_file(&self.target).unwrap();
-                ExitCode::SUCCESS
+                if self.target.exists() {
+                    fs::remove_file(&self.target).unwrap();
+                    ExitCode::SUCCESS
+                } else {
+                    eprintln!("file does not exist");
+                    ExitCode::FAILURE
+                }
             }
             Some(CliCommand::ListFiles) => {
                 let files: Vec<_> = fs::read_dir(&self.target.parent().unwrap())
@@ -257,7 +266,11 @@ fn parse_command(command: Vec<String>) -> Result<Option<CliCommand>, String> {
                         .map_err(|_| format!("'{i}' is not a valid index"))
                 })
                 .collect();
-            Ok(Some(CliCommand::Delete(Some(indices?))))
+            if indices.clone()?.is_empty() {
+                Ok(Some(CliCommand::Delete(None)))
+            } else {
+                Ok(Some(CliCommand::Delete(Some(indices?))))
+            }
         }
         Some("h") => Ok(Some(CliCommand::Help)),
         Some("l") => Ok(Some(CliCommand::ListFiles)),
