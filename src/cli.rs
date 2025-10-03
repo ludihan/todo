@@ -16,6 +16,7 @@ impl Cli {
     pub fn new(args: Args) -> Result<Self, String> {
         let mut target = dirs::data_dir().unwrap();
         target.push(env!("CARGO_PKG_NAME"));
+        fs::create_dir_all(&target).unwrap();
 
         let args = args.skip(1);
         let mut args = args.peekable();
