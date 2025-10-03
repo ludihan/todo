@@ -164,7 +164,7 @@ impl Cli {
                 }
             }
             Some(CliCommand::ListFiles) => {
-                let files: Vec<_> = fs::read_dir(&self.target.parent().unwrap())
+                let files: Vec<_> = fs::read_dir(self.target.parent().unwrap())
                     .unwrap()
                     .collect();
                 let width = ((files.len() as f64).log10() + 1.0) as usize;
@@ -196,7 +196,7 @@ impl Cli {
 
                 let result = Command::new(editor).arg(self.target).status();
 
-                if let Err(_) = result {
+                if result.is_err() {
                     eprintln!("failed to open editor");
                     ExitCode::FAILURE
                 } else {
