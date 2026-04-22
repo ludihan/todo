@@ -64,7 +64,7 @@
         );
       };
 
-      homeManagerModules = {
+      homeModules = {
         default = self.homeManagerModules.todo;
 
         todo = forAllSystems (
