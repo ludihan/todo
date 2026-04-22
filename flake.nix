@@ -54,27 +54,25 @@
       nixosModules = {
         default = self.nixosModules.todo;
 
-        todo = forAllSystems (
-          { pkgs, system }:
+        todo =
+          { pkgs, ... }:
           {
             environment.systemPackages = [
-              self.packages.${system}.todo
+              self.packages.${pkgs.system}.todo
             ];
-          }
-        );
+          };
       };
 
       homeModules = {
         default = self.homeManagerModules.todo;
 
-        todo = forAllSystems (
-          { pkgs, system }:
+        todo =
+          { pkgs, ... }:
           {
             home.packages = [
-              self.packages.${system}.todo
+              self.packages.${pkgs.system}.todo
             ];
-          }
-        );
+          };
       };
     };
 }
