@@ -5,6 +5,7 @@
 
   outputs =
     {
+      self,
       nixpkgs,
       ...
     }:
@@ -22,10 +23,10 @@
           )
         );
     in
-    {
-      packages = forAllSystems (
-        { pkgs, ... }:
-        rec {
+    forAllSystems (
+      { pkgs, system }:
+      {
+        packages = rec {
           default = todo;
           todo = pkgs.buildGoModule {
             pname = "todo";
@@ -33,12 +34,29 @@
             vendorHash = "sha256-GkW+W3Mwv9RqV9XcxKR8zD4q3p/w9mmTRrRuYRR7E9M=";
             src = ./.;
           };
-        }
-      );
+        };
 
-      devShells = forAllSystems (
-        { pkgs, ... }:
-        {
+        defaultPackage = self.packages.${system}.default;
+
+        nixosModules = {
+          default = self.nixosModules.todo;
+          todo = {
+            environment.systemPackages = [
+              self.packages.${system}.todo
+            ];
+          };
+        };
+
+        homeModules = {
+          default = self.homeModules.todo;
+          todo = {
+            home.packages = [
+              self.packages.${system}.todo
+            ];
+          };
+        };
+
+        devShells = {
           default =
             with pkgs;
             mkShell {
@@ -46,12 +64,11 @@
                 go
                 gopls
               ];
-
               shellHook = ''
                 export PS1="(todo) $PS1"
               '';
             };
-        }
-      );
-    };
+        };
+      }
+    );
 }
