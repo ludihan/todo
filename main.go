@@ -20,15 +20,20 @@ func main() {
 }
 
 type keyMap struct {
-	Up            key.Binding
-	Down          key.Binding
-	NewNote       key.Binding
-	DeleteNote    key.Binding
-	ChangeNote    key.Binding
-	ShiftNoteUp   key.Binding
-	ShiftNoteDown key.Binding
-	Help          key.Binding
-	Quit          key.Binding
+	Up              key.Binding
+	Down            key.Binding
+	NewNote         key.Binding
+	DeleteNote      key.Binding
+	ChangeNote      key.Binding
+	ShiftNoteUp     key.Binding
+	ShiftNoteDown   key.Binding
+	Access          key.Binding
+	GoBackHistory   key.Binding
+	GoFowardHistory key.Binding
+	ConfirmEdit     key.Binding
+	CancelEdit      key.Binding
+	Help            key.Binding
+	Quit            key.Binding
 }
 
 var keys = keyMap{
@@ -59,6 +64,26 @@ var keys = keyMap{
 	ShiftNoteDown: key.NewBinding(
 		key.WithKeys("J"),
 		key.WithHelp("shift+j", "shift note down"),
+	),
+	Access: key.NewBinding(
+		key.WithKeys("enter"),
+		key.WithHelp("enter", "shift note down"),
+	),
+	GoBackHistory: key.NewBinding(
+		key.WithKeys("backspace"),
+		key.WithHelp("backspace", "go back one file"),
+	),
+	GoFowardHistory: key.NewBinding(
+		key.WithKeys("shift+backspace"),
+		key.WithHelp("shift+backspace", "go foward one file"),
+	),
+	ConfirmEdit: key.NewBinding(
+		key.WithKeys("enter"),
+		key.WithHelp("enter", "confirm edit"),
+	),
+	CancelEdit: key.NewBinding(
+		key.WithKeys("esc", "ctrl+c"),
+		key.WithHelp("esc", "cancel edit"),
 	),
 	Help: key.NewBinding(
 		key.WithKeys("?"),
@@ -92,15 +117,20 @@ type model struct {
 	keys     keyMap
 	help     help.Model
 	showHelp bool
-	choices  []string
+	notes    []string
 	cursor   int
+	history  []string
+	file     string
+	editing  bool
+	noteCopy string
 }
 
 func initialModel() model {
 	return model{
-		keys:    keys,
-		help:    help.New(),
-		choices: []string{"Buy carrots", "Buy celery", "Buy kohlrabi"},
+		keys:  keys,
+		help:  help.New(),
+		notes: []string{"Buy carrots", "Buy celery", "Buy kohlrabi"},
+		file:  "default",
 	}
 }
 
@@ -113,35 +143,62 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 
 	case tea.KeyPressMsg:
-		switch {
-		case key.Matches(msg, m.keys.Up):
-			if m.cursor > 0 {
-				m.cursor--
+		if !m.editing {
+			switch {
+			case key.Matches(msg, m.keys.Up):
+				if m.cursor > 0 {
+					m.cursor--
+				}
+			case key.Matches(msg, m.keys.Down):
+				if m.cursor < len(m.notes)-1 {
+					m.cursor++
+				}
+			case key.Matches(msg, m.keys.NewNote):
+				m.notes = append(m.notes, "")
+				m.cursor = len(m.notes) - 1
+				m.editing = true
+
+			case key.Matches(msg, m.keys.ChangeNote):
+				m.editing = true
+				m.noteCopy = m.notes[m.cursor]
+
+			case key.Matches(msg, m.keys.ShiftNoteUp):
+				if m.cursor > 0 {
+					m.notes[m.cursor-1], m.notes[m.cursor] = m.notes[m.cursor], m.notes[m.cursor-1]
+					m.cursor--
+				}
+			case key.Matches(msg, m.keys.ShiftNoteDown):
+				if m.cursor < len(m.notes)-1 {
+					m.notes[m.cursor+1], m.notes[m.cursor] = m.notes[m.cursor], m.notes[m.cursor+1]
+					m.cursor++
+				}
+			case key.Matches(msg, m.keys.ShiftNoteDown):
+				m.showHelp = !m.showHelp
+			case key.Matches(msg, m.keys.Help):
+				m.showHelp = !m.showHelp
+			case key.Matches(msg, m.keys.Quit):
+				return m, tea.Quit
 			}
-		case key.Matches(msg, m.keys.Down):
-			if m.cursor < len(m.choices)-1 {
-				m.cursor++
+		} else {
+			switch {
+			case key.Matches(msg, m.keys.ConfirmEdit):
+				m.editing = false
+			case key.Matches(msg, m.keys.CancelEdit):
+				m.editing = false
+				if m.noteCopy != "" {
+					m.notes[m.cursor] = m.noteCopy
+				} else {
+					m.notes = m.notes[:len(m.notes)-1]
+					m.cursor = len(m.notes) - 1
+				}
+			default:
+				if msg.Code == tea.KeyBackspace {
+					n := &m.notes[m.cursor]
+					*n = (*n)[:len(*n)-1]
+				} else {
+					m.notes[m.cursor] += string(msg.Text)
+				}
 			}
-		case key.Matches(msg, m.keys.Down):
-			if m.cursor < len(m.choices)-1 {
-				m.cursor++
-			}
-		case key.Matches(msg, m.keys.ShiftNoteUp):
-			if m.cursor > 0 {
-				m.choices[m.cursor-1], m.choices[m.cursor] = m.choices[m.cursor], m.choices[m.cursor-1]
-				m.cursor--
-			}
-		case key.Matches(msg, m.keys.ShiftNoteDown):
-			if m.cursor < len(m.choices)-1 {
-				m.choices[m.cursor+1], m.choices[m.cursor] = m.choices[m.cursor], m.choices[m.cursor+1]
-				m.cursor++
-			}
-		case key.Matches(msg, m.keys.ShiftNoteDown):
-			m.showHelp = !m.showHelp
-		case key.Matches(msg, m.keys.Help):
-			m.showHelp = !m.showHelp
-		case key.Matches(msg, m.keys.Quit):
-			return m, tea.Quit
 		}
 
 	}
@@ -151,18 +208,23 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m model) View() tea.View {
 	var s strings.Builder
+	fmt.Fprintf(&s, " ~  %s\n", m.file)
 
-	for i, choice := range m.choices {
+	for i, choice := range m.notes {
 
 		cursor := "   "
-		if m.cursor == i {
+		if m.cursor == i && !m.editing {
 			cursor = "███"
 		}
 
-		fmt.Fprintf(&s, "%s %d: %s\n", cursor, i+1, choice)
+		if m.editing && m.cursor == i {
+			fmt.Fprintf(&s, "%s %d: %s█\n", cursor, i+1, choice)
+		} else {
+			fmt.Fprintf(&s, "%s %d: %s\n", cursor, i+1, choice)
+		}
 	}
 
-	if m.showHelp {
+	if m.showHelp && !m.editing {
 		helpView := m.help.View(m.keys)
 		fmt.Fprintf(&s, "%s", helpView)
 	}
