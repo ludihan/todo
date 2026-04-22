@@ -4,71 +4,77 @@
   };
 
   outputs =
-    {
-      self,
-      nixpkgs,
-      ...
-    }:
+    { self, nixpkgs, ... }:
     let
       supportedSystems = nixpkgs.lib.systems.flakeExposed;
+
       forAllSystems =
-        function:
+        f:
         nixpkgs.lib.genAttrs supportedSystems (
           system:
-          function (
-            import nixpkgs {
+          let
+            pkgs = import nixpkgs {
               inherit system;
-              config.allowUnfree = true;
-            }
-          )
+              # config.allowUnfree = true;
+            };
+          in
+          f { inherit pkgs system; }
         );
     in
-    forAllSystems (
-      { pkgs, system }:
-      {
-        packages = rec {
-          default = todo;
+    {
+      packages = forAllSystems (
+        { pkgs, ... }:
+        rec {
           todo = pkgs.buildGoModule {
             pname = "todo";
             version = "0.0.1";
             vendorHash = "sha256-GkW+W3Mwv9RqV9XcxKR8zD4q3p/w9mmTRrRuYRR7E9M=";
             src = ./.;
           };
-        };
 
-        defaultPackage = self.packages.${system}.default;
+          default = todo;
+        }
+      );
 
-        nixosModules = {
-          default = self.nixosModules.todo;
-          todo = {
+      devShells = forAllSystems (
+        { pkgs, ... }:
+        {
+          default = pkgs.mkShell {
+            buildInputs = with pkgs; [
+              go
+              gopls
+            ];
+            shellHook = ''
+              export PS1="(todo) $PS1"
+            '';
+          };
+        }
+      );
+
+      nixosModules = {
+        default = self.nixosModules.todo;
+
+        todo = forAllSystems (
+          { pkgs, system }:
+          {
             environment.systemPackages = [
               self.packages.${system}.todo
             ];
-          };
-        };
+          }
+        );
+      };
 
-        homeModules = {
-          default = self.homeModules.todo;
-          todo = {
+      homeManagerModules = {
+        default = self.homeManagerModules.todo;
+
+        todo = forAllSystems (
+          { pkgs, system }:
+          {
             home.packages = [
               self.packages.${system}.todo
             ];
-          };
-        };
-
-        devShells = {
-          default =
-            with pkgs;
-            mkShell {
-              buildInputs = [
-                go
-                gopls
-              ];
-              shellHook = ''
-                export PS1="(todo) $PS1"
-              '';
-            };
-        };
-      }
-    );
+          }
+        );
+      };
+    };
 }
