@@ -58,7 +58,7 @@
           { pkgs, ... }:
           {
             environment.systemPackages = [
-              self.packages.${pkgs.system}.todo
+              self.packages.${pkgs.stdenv.hostPlatform.system}.todo
             ];
           };
       };
@@ -70,7 +70,7 @@
           { pkgs, ... }:
           {
             home.packages = [
-              self.packages.${pkgs.system}.todo
+              self.packages.${pkgs.stdenv.hostPlatform.system}.todo
             ];
           };
       };
