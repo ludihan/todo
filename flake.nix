@@ -30,7 +30,7 @@
           todo = pkgs.buildGoModule {
             pname = "todo";
             version = "0.0.1";
-            vendorHash = "sha256-8uKnWsQZEzLV5t8wtYqAONrsIRWdZx7OF7DAeOMckTU=";
+            vendorHash = "sha256-GkW+W3Mwv9RqV9XcxKR8zD4q3p/w9mmTRrRuYRR7E9M=";
             src = ./.;
           };
         }
