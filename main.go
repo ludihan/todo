@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"math"
 	"os"
 	"path"
 	"slices"
@@ -474,15 +475,16 @@ func (m model) View() tea.View {
 	}
 
 	for i, note := range m.notes {
+		prefix := math.Log10(float64(len(m.notes)))
 		noteSelection := "   "
 		if m.cursor == i && !m.textInput.Focused() {
 			noteSelection = "███"
 		}
 
 		if m.textInput.Focused() && m.cursor == i {
-			fmt.Fprintf(&s, "%s %d: %s\n", noteSelection, i+1, m.textInput.View())
+			fmt.Fprintf(&s, "%s %*d: %s\n", noteSelection, int(prefix)+1, i+1, m.textInput.View())
 		} else {
-			fmt.Fprintf(&s, "%s %d: %s\n", noteSelection, i+1, note)
+			fmt.Fprintf(&s, "%s %*d: %s\n", noteSelection, int(prefix)+1, i+1, note)
 		}
 	}
 
