@@ -157,22 +157,54 @@ type model struct {
 	notes      []string
 	cursor     int
 	history    []string
-	filePath   string
+	file       string
 	noteCopy   string
 	root       *os.Root
 	err        error
 	shouldQuit bool
 }
 
+var defaultFile = "@"
+
+func createRootAndDefaultFile() (*os.Root, error) {
+	rootPath := path.Join(xdg.DataHome, "todo")
+	_, err := os.Stat(rootPath)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			err = os.MkdirAll(rootPath, 0777)
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			return nil, err
+		}
+	}
+
+	root, err := os.OpenRoot(rootPath)
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = root.Stat(defaultFile)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			f, err := root.Create(defaultFile)
+			if err != nil {
+				panic(err)
+			}
+			defer f.Close()
+		}
+	}
+	return root, nil
+}
+
 func initialModel() model {
-	filePath := "@"
-	root, err := os.OpenRoot(filePath)
+	root, err := createRootAndDefaultFile()
 	if err != nil {
 		return model{
 			err: err,
 		}
 	}
-	filePath = path.Join(xdg.DataHome, filePath)
 	ti := textinput.New()
 	ti.Prompt = ""
 	styles := ti.Styles()
@@ -180,15 +212,8 @@ func initialModel() model {
 	styles.Cursor.Color = lipgloss.BrightWhite
 	ti.SetVirtualCursor(true)
 	ti.SetStyles(styles)
-	_, err = root.Stat(filePath)
-	if err != nil {
-		f, err := root.Create(filePath)
-		if err != nil {
-			panic(err)
-		}
-		defer f.Close()
-	}
-	data, err := os.ReadFile(filePath)
+
+	data, err := root.ReadFile(defaultFile)
 	if !utf8.Valid(data) {
 		err = errors.New("invalid utf8")
 	}
@@ -203,7 +228,8 @@ func initialModel() model {
 		keys:      keys,
 		help:      help.New(),
 		notes:     notes,
-		filePath:  filePath,
+		file:      defaultFile,
+		root:      root,
 		err:       err,
 	}
 }
@@ -213,7 +239,7 @@ func (m model) Init() tea.Cmd {
 }
 
 func (m *model) saveFile() {
-	err := m.root.WriteFile(m.filePath, []byte(strings.Join(m.notes, "\n")), 0644)
+	err := m.root.WriteFile(m.file, []byte(strings.Join(m.notes, "\n")), 0777)
 	if err != nil {
 		m.err = err
 	}
@@ -331,10 +357,9 @@ func (m model) View() tea.View {
 	var v tea.View
 	var s strings.Builder
 
-	fmt.Fprintf(&s, " ~  %s\n", path.Base(m.filePath))
+	fmt.Fprintf(&s, " ~  %s\n", path.Base(m.file))
 
 	for i, note := range m.notes {
-
 		noteSelection := "   "
 		if m.cursor == i && !m.textInput.Focused() {
 			noteSelection = "███"
@@ -351,6 +376,8 @@ func (m model) View() tea.View {
 		helpView := m.help.View(m.keys)
 		fmt.Fprintf(&s, "%s", helpView)
 	}
+
+	v.SetContent(s.String())
 
 	return v
 }
