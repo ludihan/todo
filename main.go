@@ -184,6 +184,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case key.Matches(msg, m.keys.DownLast):
 				m.cursor = len(m.notes) - 1
 			case key.Matches(msg, m.keys.NewNoteBelow):
+				m.noteCopy = ""
 				m.notes = append(m.notes, "")
 				if len(m.notes) > 1 {
 					m.cursor++
@@ -192,6 +193,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.textInput.Focus()
 				return m, nil
 			case key.Matches(msg, m.keys.NewNoteAbove):
+				m.noteCopy = ""
 				m.notes = slices.Insert(m.notes, m.cursor, "")
 				m.textInput.Focus()
 				return m, nil
@@ -203,8 +205,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 
 			case key.Matches(msg, m.keys.DeleteNote):
-				m.notes = slices.Delete(m.notes, m.cursor, m.cursor+1)
-				return m, nil
+				if len(m.notes) > 0 {
+					m.notes = slices.Delete(m.notes, m.cursor, m.cursor+1)
+					m.cursor = max(min(m.cursor, len(m.notes)-1), 0)
+					return m, nil
+				}
 
 			case key.Matches(msg, m.keys.ShiftNoteUp):
 				if m.cursor > 0 {
