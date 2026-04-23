@@ -469,9 +469,9 @@ func (m model) View() tea.View {
 	var s strings.Builder
 
 	if !m.fileView {
-		fmt.Fprintf(&s, "~~~ %s\n", path.Base(m.file))
+		fmt.Fprintf(&s, "~~~ %s ~~~\n", path.Base(m.file))
 	} else {
-		fmt.Fprintf(&s, "FILE MODE \n")
+		fmt.Fprintf(&s, "@@@@@@ \n")
 	}
 
 	for i, note := range m.notes {
