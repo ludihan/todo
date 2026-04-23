@@ -1,17 +1,20 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
+	"path"
 	"slices"
 	"strings"
+	"unicode/utf8"
 
 	"charm.land/bubbles/v2/help"
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	_ "github.com/adrg/xdg"
+	"github.com/adrg/xdg"
 )
 
 func main() {
@@ -139,11 +142,14 @@ type model struct {
 	notes     []string
 	cursor    int
 	history   []string
-	file      string
+	filePath  string
 	noteCopy  string
+	err       error
 }
 
 func initialModel() model {
+	filePath := "notes"
+	filePath = path.Join(xdg.DataHome, filePath)
 	ti := textinput.New()
 	ti.Prompt = ""
 	styles := ti.Styles()
@@ -151,18 +157,43 @@ func initialModel() model {
 	styles.Cursor.Color = lipgloss.BrightWhite
 	ti.SetVirtualCursor(true)
 	ti.SetStyles(styles)
+	_, err := os.Stat(filePath)
+	if err != nil {
+		f, err := os.Create(filePath)
+		if err != nil {
+			panic(err)
+		}
+		defer f.Close()
+	}
+	data, err := os.ReadFile(filePath)
+	if !utf8.Valid(data) {
+		err = errors.New("invalid utf8")
+	}
+	noteData := string(data)
+	notes := []string{}
+	for line := range strings.Lines(noteData) {
+		notes = append(notes, strings.TrimSpace(line))
+	}
+
 	return model{
 		textInput: ti,
 		keys:      keys,
 		help:      help.New(),
-		notes:     []string{"Buy carrots", "Buy celery", "Buy kohlrabi"},
-		file:      "*",
+		notes:     notes,
+		filePath:  filePath,
+		err:       err,
 	}
 }
 
 func (m model) Init() tea.Cmd {
-	// Just return `nil`, which means "no I/O right now, please."
 	return nil
+}
+
+func (m *model) saveFile() {
+	err := os.WriteFile(m.filePath, []byte(strings.Join(m.notes, "\n")), 0644)
+	if err != nil {
+		m.err = err
+	}
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -213,6 +244,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if len(m.notes) > 0 {
 					m.notes = slices.Delete(m.notes, m.cursor, m.cursor+1)
 					m.cursor = max(min(m.cursor, len(m.notes)-1), 0)
+					m.saveFile()
 					return m, nil
 				}
 
@@ -243,6 +275,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.notes[m.cursor] = strings.TrimSpace(m.textInput.Value())
 				m.textInput.Blur()
 				m.textInput.Reset()
+				m.saveFile()
+				return m, nil
 
 			case key.Matches(msg, m.keys.CancelEdit):
 				m.textInput.Blur()
@@ -264,10 +298,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m model) View() tea.View {
+	if m.err != nil {
+		return tea.NewView(m.err.Error())
+	}
 	var v tea.View
 	var s strings.Builder
 
-	fmt.Fprintf(&s, " ~  %s\n", m.file)
+	fmt.Fprintf(&s, " ~  %s\n", path.Base(m.filePath))
 
 	for i, note := range m.notes {
 
