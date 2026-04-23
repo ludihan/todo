@@ -120,7 +120,7 @@ var keys = keyMap{
 		key.WithHelp("esc", "cancel edit"),
 	),
 	FileView: key.NewBinding(
-		key.WithKeys("tab"),
+		key.WithKeys("tab", "-"),
 		key.WithHelp("tab", "show file view"),
 	),
 	Help: key.NewBinding(
