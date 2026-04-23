@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path"
 	"slices"
@@ -41,8 +42,8 @@ type keyMap struct {
 	Access          key.Binding
 	GoBackHistory   key.Binding
 	GoFowardHistory key.Binding
-	ConfirmEdit     key.Binding
-	CancelEdit      key.Binding
+	Confirm         key.Binding
+	Cancel          key.Binding
 	FileView        key.Binding
 	Help            key.Binding
 	Quit            key.Binding
@@ -109,11 +110,11 @@ var keys = keyMap{
 		key.WithKeys("shift+backspace"),
 		key.WithHelp("shift+backspace", "go foward one file"),
 	),
-	ConfirmEdit: key.NewBinding(
+	Confirm: key.NewBinding(
 		key.WithKeys("enter"),
 		key.WithHelp("enter", "confirm edit"),
 	),
-	CancelEdit: key.NewBinding(
+	Cancel: key.NewBinding(
 		key.WithKeys("esc", "ctrl+c"),
 		key.WithHelp("esc", "cancel edit"),
 	),
@@ -158,13 +159,15 @@ type model struct {
 	cursor     int
 	history    []string
 	file       string
+	files      map[string]struct{}
+	fileView   bool
 	noteCopy   string
 	root       *os.Root
 	err        error
 	shouldQuit bool
 }
 
-var defaultFile = "@"
+const defaultFile = "general"
 
 func createRootAndDefaultFile() (*os.Root, error) {
 	rootPath := path.Join(xdg.DataHome, "todo")
@@ -198,13 +201,7 @@ func createRootAndDefaultFile() (*os.Root, error) {
 	return root, nil
 }
 
-func initialModel() model {
-	root, err := createRootAndDefaultFile()
-	if err != nil {
-		return model{
-			err: err,
-		}
-	}
+func configureTextInput() textinput.Model {
 	ti := textinput.New()
 	ti.Prompt = ""
 	styles := ti.Styles()
@@ -212,16 +209,20 @@ func initialModel() model {
 	styles.Cursor.Color = lipgloss.BrightWhite
 	ti.SetVirtualCursor(true)
 	ti.SetStyles(styles)
+	return ti
+}
 
-	data, err := root.ReadFile(defaultFile)
-	if !utf8.Valid(data) {
-		err = errors.New("invalid utf8")
+func initialModel() model {
+	root, err := createRootAndDefaultFile()
+	if err != nil {
+		return model{
+			err: err,
+		}
 	}
-	noteData := string(data)
-	notes := []string{}
-	for line := range strings.Lines(noteData) {
-		notes = append(notes, strings.TrimSpace(line))
-	}
+
+	ti := configureTextInput()
+	notes, err := readNotes(root, defaultFile)
+	files, err := readFiles(root)
 
 	return model{
 		textInput: ti,
@@ -229,6 +230,7 @@ func initialModel() model {
 		help:      help.New(),
 		notes:     notes,
 		file:      defaultFile,
+		files:     files,
 		root:      root,
 		err:       err,
 	}
@@ -239,17 +241,90 @@ func (m model) Init() tea.Cmd {
 }
 
 func (m *model) saveFile() {
-	err := m.root.WriteFile(m.file, []byte(strings.Join(m.notes, "\n")), 0777)
+	err := m.root.WriteFile(m.file, []byte(strings.Join(m.notes, "\n")+"\n"), 0777)
 	if err != nil {
 		m.err = err
 	}
 }
 
+func readNotes(root *os.Root, file string) ([]string, error) {
+	data, err := root.ReadFile(file)
+	if err != nil {
+		return nil, err
+	}
+
+	if !utf8.Valid(data) {
+		return nil, errors.New("invalid utf8")
+	}
+
+	noteData := string(data)
+	notes := []string{}
+	for line := range strings.Lines(noteData) {
+		notes = append(notes, strings.TrimSpace(line))
+	}
+	return notes, nil
+}
+
+func readFiles(root *os.Root) (map[string]struct{}, error) {
+	fsRoot := root.FS()
+	dirEntries, err := fs.ReadDir(fsRoot, ".")
+	if err != nil {
+		return nil, err
+	}
+
+	dirs := map[string]struct{}{}
+	for _, dir := range dirEntries {
+		dirs[dir.Name()] = struct{}{}
+	}
+
+	return dirs, nil
+}
+
+func mapFileViewToFs(root *os.Root, files []string) error {
+	filesMap := map[string]struct{}{}
+	for _, f := range files {
+		if f != "" {
+			filesMap[f] = struct{}{}
+		}
+	}
+	existingFiles, err := readFiles(root)
+	if err != nil {
+		return err
+	}
+
+	for v := range filesMap {
+		_, ok := existingFiles[v]
+		if !ok {
+			f, err := root.Create(v)
+			f.Close()
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	for k := range existingFiles {
+		_, ok := filesMap[k]
+		if !ok {
+			err := root.Remove(k)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if m.err != nil {
+		m.root.Close()
 		return m, tea.Quit
 	}
+
 	var cmd tea.Cmd
+	m.textInput, cmd = m.textInput.Update(msg)
+
 	switch msg := msg.(type) {
 	case tea.KeyPressMsg:
 		if !m.textInput.Focused() {
@@ -272,65 +347,99 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			case key.Matches(msg, m.keys.NewNoteBelow):
 				m.noteCopy = ""
-				m.notes = append(m.notes, "")
-				if len(m.notes) > 1 {
-					m.cursor++
-					m.notes[len(m.notes)-1], m.notes[m.cursor] = m.notes[m.cursor], m.notes[len(m.notes)-1]
-				}
+				m.cursor = min(max(0, m.cursor+1), len(m.notes))
+				m.notes = slices.Insert(m.notes, m.cursor, "")
 				m.textInput.Focus()
-				return m, nil
 
 			case key.Matches(msg, m.keys.NewNoteAbove):
 				m.noteCopy = ""
 				m.notes = slices.Insert(m.notes, m.cursor, "")
 				m.textInput.Focus()
-				return m, nil
 
 			case key.Matches(msg, m.keys.ChangeNote):
 				m.textInput.Focus()
 				m.noteCopy = m.notes[m.cursor]
 				m.textInput.SetValue(m.noteCopy)
-				return m, nil
 
 			case key.Matches(msg, m.keys.DeleteNote):
 				if len(m.notes) > 0 {
-					m.notes = slices.Delete(m.notes, m.cursor, m.cursor+1)
-					m.cursor = max(min(m.cursor, len(m.notes)-1), 0)
-					m.saveFile()
-					return m, nil
+					if !(m.fileView && m.cursor == 0) {
+						m.notes = slices.Delete(m.notes, m.cursor, m.cursor+1)
+						m.cursor = max(min(m.cursor, len(m.notes)-1), 0)
+					}
+					if !m.fileView {
+						m.saveFile()
+					}
 				}
 
 			case key.Matches(msg, m.keys.ShiftNoteUp):
-				if m.cursor > 0 {
+				if m.cursor > 0 && !m.fileView {
 					m.notes[m.cursor-1], m.notes[m.cursor] = m.notes[m.cursor], m.notes[m.cursor-1]
 					m.cursor--
 				}
 
 			case key.Matches(msg, m.keys.ShiftNoteDown):
-				if m.cursor < len(m.notes)-1 {
+				if m.cursor < len(m.notes)-1 && !m.fileView {
 					m.notes[m.cursor+1], m.notes[m.cursor] = m.notes[m.cursor], m.notes[m.cursor+1]
 					m.cursor++
 				}
-			case key.Matches(msg, m.keys.ShiftNoteDown):
-				m.showHelp = !m.showHelp
+
+			case key.Matches(msg, m.keys.FileView):
+				m.fileView = !m.fileView
+				if m.fileView {
+					files, err := readFiles(m.root)
+					m.files = files
+					m.err = err
+					notes := []string{}
+					for k := range m.files {
+						if k != defaultFile {
+							notes = append(notes, k)
+						}
+					}
+					slices.Sort(notes)
+					notes = append([]string{defaultFile}, notes...)
+					m.notes = notes
+					for i, v := range notes {
+						if v == m.file {
+							m.cursor = i
+						}
+					}
+				} else {
+					m.cursor = 0
+					notes, err := readNotes(m.root, m.file)
+					m.err = err
+					m.notes = notes
+				}
 
 			case key.Matches(msg, m.keys.Help):
 				m.showHelp = !m.showHelp
 
 			case key.Matches(msg, m.keys.Quit):
+				m.root.Close()
 				return m, tea.Quit
 
+			case key.Matches(msg, m.keys.Confirm):
+				if m.fileView {
+					file := m.notes[m.cursor]
+					m.file = file
+					notes, err := readNotes(m.root, m.notes[m.cursor])
+					m.fileView = !m.fileView
+					m.err = err
+					m.notes = notes
+					m.cursor = 0
+				}
 			}
 		} else {
 			switch {
-			case key.Matches(msg, m.keys.ConfirmEdit):
+			case key.Matches(msg, m.keys.Confirm):
 				m.notes[m.cursor] = strings.TrimSpace(m.textInput.Value())
 				m.textInput.Blur()
 				m.textInput.Reset()
-				m.saveFile()
-				return m, nil
+				if !m.fileView {
+					m.saveFile()
+				}
 
-			case key.Matches(msg, m.keys.CancelEdit):
+			case key.Matches(msg, m.keys.Cancel):
 				m.textInput.Blur()
 				m.textInput.Reset()
 				if m.noteCopy != "" {
@@ -342,10 +451,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			}
 		}
-
 	}
 
-	m.textInput, cmd = m.textInput.Update(msg)
+	if m.fileView {
+		mapFileViewToFs(m.root, m.notes)
+	}
 	return m, cmd
 }
 
@@ -357,7 +467,11 @@ func (m model) View() tea.View {
 	var v tea.View
 	var s strings.Builder
 
-	fmt.Fprintf(&s, " ~  %s\n", path.Base(m.file))
+	if !m.fileView {
+		fmt.Fprintf(&s, "~~~ %s\n", path.Base(m.file))
+	} else {
+		fmt.Fprintf(&s, "FILE MODE \n")
+	}
 
 	for i, note := range m.notes {
 		noteSelection := "   "
