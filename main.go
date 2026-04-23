@@ -3,11 +3,14 @@ package main
 import (
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 
 	"charm.land/bubbles/v2/help"
 	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	_ "github.com/adrg/xdg"
 )
 
@@ -22,7 +25,10 @@ func main() {
 type keyMap struct {
 	Up              key.Binding
 	Down            key.Binding
-	NewNote         key.Binding
+	UpFirst         key.Binding
+	DownLast        key.Binding
+	NewNoteBelow    key.Binding
+	NewNoteAbove    key.Binding
 	DeleteNote      key.Binding
 	ChangeNote      key.Binding
 	ShiftNoteUp     key.Binding
@@ -45,9 +51,21 @@ var keys = keyMap{
 		key.WithKeys("j"),
 		key.WithHelp("j", "move down"),
 	),
-	NewNote: key.NewBinding(
-		key.WithKeys("n"),
+	UpFirst: key.NewBinding(
+		key.WithKeys("g"),
+		key.WithHelp("g", "go to first note"),
+	),
+	DownLast: key.NewBinding(
+		key.WithKeys("G"),
+		key.WithHelp("G", "go to last note"),
+	),
+	NewNoteBelow: key.NewBinding(
+		key.WithKeys("n", "o"),
 		key.WithHelp("n", "new note"),
+	),
+	NewNoteAbove: key.NewBinding(
+		key.WithKeys("N", "O"),
+		key.WithHelp("N", "new note"),
 	),
 	ChangeNote: key.NewBinding(
 		key.WithKeys("c", "e"),
@@ -99,7 +117,7 @@ func (k keyMap) ShortHelp() []key.Binding {
 	return []key.Binding{
 		k.Up,
 		k.Down,
-		k.NewNote,
+		k.NewNoteBelow,
 		k.ChangeNote,
 		k.DeleteNote,
 		k.ShiftNoteUp,
@@ -114,23 +132,31 @@ func (k keyMap) FullHelp() [][]key.Binding {
 }
 
 type model struct {
-	keys     keyMap
-	help     help.Model
-	showHelp bool
-	notes    []string
-	cursor   int
-	history  []string
-	file     string
-	editing  bool
-	noteCopy string
+	keys      keyMap
+	textInput textinput.Model
+	help      help.Model
+	showHelp  bool
+	notes     []string
+	cursor    int
+	history   []string
+	file      string
+	noteCopy  string
 }
 
 func initialModel() model {
+	ti := textinput.New()
+	ti.Prompt = ""
+	styles := ti.Styles()
+	styles.Cursor.Blink = false
+	styles.Cursor.Color = lipgloss.BrightWhite
+	ti.SetVirtualCursor(true)
+	ti.SetStyles(styles)
 	return model{
-		keys:  keys,
-		help:  help.New(),
-		notes: []string{"Buy carrots", "Buy celery", "Buy kohlrabi"},
-		file:  "default",
+		textInput: ti,
+		keys:      keys,
+		help:      help.New(),
+		notes:     []string{"Buy carrots", "Buy celery", "Buy kohlrabi"},
+		file:      "*",
 	}
 }
 
@@ -140,10 +166,10 @@ func (m model) Init() tea.Cmd {
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var cmd tea.Cmd
 	switch msg := msg.(type) {
-
 	case tea.KeyPressMsg:
-		if !m.editing {
+		if !m.textInput.Focused() {
 			switch {
 			case key.Matches(msg, m.keys.Up):
 				if m.cursor > 0 {
@@ -153,14 +179,32 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if m.cursor < len(m.notes)-1 {
 					m.cursor++
 				}
-			case key.Matches(msg, m.keys.NewNote):
-				m.notes = append(m.notes, "")
+			case key.Matches(msg, m.keys.UpFirst):
+				m.cursor = 0
+			case key.Matches(msg, m.keys.DownLast):
 				m.cursor = len(m.notes) - 1
-				m.editing = true
+			case key.Matches(msg, m.keys.NewNoteBelow):
+				m.notes = append(m.notes, "")
+				if len(m.notes) > 1 {
+					m.cursor++
+					m.notes[len(m.notes)-1], m.notes[m.cursor] = m.notes[m.cursor], m.notes[len(m.notes)-1]
+				}
+				m.textInput.Focus()
+				return m, nil
+			case key.Matches(msg, m.keys.NewNoteAbove):
+				m.notes = slices.Insert(m.notes, m.cursor, "")
+				m.textInput.Focus()
+				return m, nil
 
 			case key.Matches(msg, m.keys.ChangeNote):
-				m.editing = true
+				m.textInput.Focus()
 				m.noteCopy = m.notes[m.cursor]
+				m.textInput.SetValue(m.noteCopy)
+				return m, nil
+
+			case key.Matches(msg, m.keys.DeleteNote):
+				m.notes = slices.Delete(m.notes, m.cursor, m.cursor+1)
+				return m, nil
 
 			case key.Matches(msg, m.keys.ShiftNoteUp):
 				if m.cursor > 0 {
@@ -182,52 +226,52 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			switch {
 			case key.Matches(msg, m.keys.ConfirmEdit):
-				m.editing = false
+				m.notes[m.cursor] = strings.TrimSpace(m.textInput.Value())
+				m.textInput.Blur()
+				m.textInput.Reset()
 			case key.Matches(msg, m.keys.CancelEdit):
-				m.editing = false
+				m.textInput.Blur()
+				m.textInput.Reset()
 				if m.noteCopy != "" {
 					m.notes[m.cursor] = m.noteCopy
 				} else {
-					m.notes = m.notes[:len(m.notes)-1]
-					m.cursor = len(m.notes) - 1
-				}
-			default:
-				if msg.Code == tea.KeyBackspace {
-					n := &m.notes[m.cursor]
-					*n = (*n)[:len(*n)-1]
-				} else {
-					m.notes[m.cursor] += string(msg.Text)
+					m.notes = append(m.notes[:m.cursor], m.notes[m.cursor+1:]...)
+					m.cursor = max(m.cursor-1, 0)
 				}
 			}
 		}
 
 	}
 
-	return m, nil
+	m.textInput, cmd = m.textInput.Update(msg)
+	return m, cmd
 }
 
 func (m model) View() tea.View {
+	var v tea.View
 	var s strings.Builder
+
 	fmt.Fprintf(&s, " ~  %s\n", m.file)
 
-	for i, choice := range m.notes {
+	for i, note := range m.notes {
 
-		cursor := "   "
-		if m.cursor == i && !m.editing {
-			cursor = "███"
+		noteSelection := "   "
+		if m.cursor == i && !m.textInput.Focused() {
+			noteSelection = "███"
 		}
 
-		if m.editing && m.cursor == i {
-			fmt.Fprintf(&s, "%s %d: %s█\n", cursor, i+1, choice)
+		if m.textInput.Focused() && m.cursor == i {
+			fmt.Fprintf(&s, "%s %d: %s\n", noteSelection, i+1, m.textInput.View())
 		} else {
-			fmt.Fprintf(&s, "%s %d: %s\n", cursor, i+1, choice)
+			fmt.Fprintf(&s, "%s %d: %s\n", noteSelection, i+1, note)
 		}
 	}
 
-	if m.showHelp && !m.editing {
+	if m.showHelp && !m.textInput.Focused() {
 		helpView := m.help.View(m.keys)
 		fmt.Fprintf(&s, "%s", helpView)
 	}
+	v.SetContent(s.String())
 
-	return tea.NewView(s.String())
+	return v
 }
