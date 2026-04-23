@@ -30,6 +30,8 @@ type keyMap struct {
 	Down            key.Binding
 	UpFirst         key.Binding
 	DownLast        key.Binding
+	NextFile        key.Binding
+	PreviousFile    key.Binding
 	NewNoteBelow    key.Binding
 	NewNoteAbove    key.Binding
 	DeleteNote      key.Binding
@@ -41,6 +43,7 @@ type keyMap struct {
 	GoFowardHistory key.Binding
 	ConfirmEdit     key.Binding
 	CancelEdit      key.Binding
+	FileView        key.Binding
 	Help            key.Binding
 	Quit            key.Binding
 }
@@ -61,6 +64,14 @@ var keys = keyMap{
 	DownLast: key.NewBinding(
 		key.WithKeys("G"),
 		key.WithHelp("G", "go to last note"),
+	),
+	NextFile: key.NewBinding(
+		key.WithKeys("l"),
+		key.WithHelp("l", "go to next file"),
+	),
+	PreviousFile: key.NewBinding(
+		key.WithKeys("h"),
+		key.WithHelp("h", "go to previous file"),
 	),
 	NewNoteBelow: key.NewBinding(
 		key.WithKeys("n", "o"),
@@ -106,6 +117,10 @@ var keys = keyMap{
 		key.WithKeys("esc", "ctrl+c"),
 		key.WithHelp("esc", "cancel edit"),
 	),
+	FileView: key.NewBinding(
+		key.WithKeys("tab"),
+		key.WithHelp("tab", "show file view"),
+	),
 	Help: key.NewBinding(
 		key.WithKeys("?"),
 		key.WithHelp("?", "help"),
@@ -135,20 +150,28 @@ func (k keyMap) FullHelp() [][]key.Binding {
 }
 
 type model struct {
-	keys      keyMap
-	textInput textinput.Model
-	help      help.Model
-	showHelp  bool
-	notes     []string
-	cursor    int
-	history   []string
-	filePath  string
-	noteCopy  string
-	err       error
+	keys       keyMap
+	textInput  textinput.Model
+	help       help.Model
+	showHelp   bool
+	notes      []string
+	cursor     int
+	history    []string
+	filePath   string
+	noteCopy   string
+	root       *os.Root
+	err        error
+	shouldQuit bool
 }
 
 func initialModel() model {
-	filePath := "notes"
+	filePath := "@"
+	root, err := os.OpenRoot(filePath)
+	if err != nil {
+		return model{
+			err: err,
+		}
+	}
 	filePath = path.Join(xdg.DataHome, filePath)
 	ti := textinput.New()
 	ti.Prompt = ""
@@ -157,9 +180,9 @@ func initialModel() model {
 	styles.Cursor.Color = lipgloss.BrightWhite
 	ti.SetVirtualCursor(true)
 	ti.SetStyles(styles)
-	_, err := os.Stat(filePath)
+	_, err = root.Stat(filePath)
 	if err != nil {
-		f, err := os.Create(filePath)
+		f, err := root.Create(filePath)
 		if err != nil {
 			panic(err)
 		}
@@ -190,13 +213,16 @@ func (m model) Init() tea.Cmd {
 }
 
 func (m *model) saveFile() {
-	err := os.WriteFile(m.filePath, []byte(strings.Join(m.notes, "\n")), 0644)
+	err := m.root.WriteFile(m.filePath, []byte(strings.Join(m.notes, "\n")), 0644)
 	if err != nil {
 		m.err = err
 	}
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if m.err != nil {
+		return m, tea.Quit
+	}
 	var cmd tea.Cmd
 	switch msg := msg.(type) {
 	case tea.KeyPressMsg:
@@ -299,8 +325,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m model) View() tea.View {
 	if m.err != nil {
-		return tea.NewView(m.err.Error())
+		return tea.NewView(m.err.Error() + "\n")
 	}
+
 	var v tea.View
 	var s strings.Builder
 
@@ -324,7 +351,6 @@ func (m model) View() tea.View {
 		helpView := m.help.View(m.keys)
 		fmt.Fprintf(&s, "%s", helpView)
 	}
-	v.SetContent(s.String())
 
 	return v
 }
