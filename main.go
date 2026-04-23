@@ -175,14 +175,18 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if m.cursor > 0 {
 					m.cursor--
 				}
+
 			case key.Matches(msg, m.keys.Down):
 				if m.cursor < len(m.notes)-1 {
 					m.cursor++
 				}
+
 			case key.Matches(msg, m.keys.UpFirst):
 				m.cursor = 0
+
 			case key.Matches(msg, m.keys.DownLast):
 				m.cursor = len(m.notes) - 1
+
 			case key.Matches(msg, m.keys.NewNoteBelow):
 				m.noteCopy = ""
 				m.notes = append(m.notes, "")
@@ -192,6 +196,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				m.textInput.Focus()
 				return m, nil
+
 			case key.Matches(msg, m.keys.NewNoteAbove):
 				m.noteCopy = ""
 				m.notes = slices.Insert(m.notes, m.cursor, "")
@@ -216,6 +221,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.notes[m.cursor-1], m.notes[m.cursor] = m.notes[m.cursor], m.notes[m.cursor-1]
 					m.cursor--
 				}
+
 			case key.Matches(msg, m.keys.ShiftNoteDown):
 				if m.cursor < len(m.notes)-1 {
 					m.notes[m.cursor+1], m.notes[m.cursor] = m.notes[m.cursor], m.notes[m.cursor+1]
@@ -223,10 +229,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			case key.Matches(msg, m.keys.ShiftNoteDown):
 				m.showHelp = !m.showHelp
+
 			case key.Matches(msg, m.keys.Help):
 				m.showHelp = !m.showHelp
+
 			case key.Matches(msg, m.keys.Quit):
 				return m, tea.Quit
+
 			}
 		} else {
 			switch {
@@ -234,6 +243,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.notes[m.cursor] = strings.TrimSpace(m.textInput.Value())
 				m.textInput.Blur()
 				m.textInput.Reset()
+
 			case key.Matches(msg, m.keys.CancelEdit):
 				m.textInput.Blur()
 				m.textInput.Reset()
@@ -243,6 +253,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.notes = append(m.notes[:m.cursor], m.notes[m.cursor+1:]...)
 					m.cursor = max(m.cursor-1, 0)
 				}
+
 			}
 		}
 
