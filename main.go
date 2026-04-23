@@ -487,6 +487,9 @@ func (m model) View() tea.View {
 			fmt.Fprintf(&s, "%s %*d: %s\n", noteSelection, int(prefix)+1, i+1, note)
 		}
 	}
+	if len(m.notes) == 0 {
+		fmt.Fprintf(&s, "list empty\n")
+	}
 
 	if m.showHelp && !m.textInput.Focused() {
 		helpView := m.help.View(m.keys)
