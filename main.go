@@ -197,6 +197,8 @@ func createRootAndDefaultFile() (*os.Root, error) {
 				panic(err)
 			}
 			defer f.Close()
+		} else {
+			return nil, err
 		}
 	}
 	return root, nil
