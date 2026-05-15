@@ -361,9 +361,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.textInput.Focus()
 
 			case key.Matches(msg, m.keys.ChangeNote):
-				m.textInput.Focus()
-				m.noteCopy = m.notes[m.cursor]
-				m.textInput.SetValue(m.noteCopy)
+				if len(m.notes) > 0 {
+					m.textInput.Focus()
+					m.noteCopy = m.notes[m.cursor]
+					m.textInput.SetValue(m.noteCopy)
+				}
 
 			case key.Matches(msg, m.keys.DeleteNote):
 				if len(m.notes) > 0 {
