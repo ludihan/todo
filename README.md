@@ -2,8 +2,7 @@
 
 todo is a tool for quick reminders and taking notes.
 
-<script src="https://asciinema.org/a/nYNgbdKGulOVDFbM.js" id="asciicast-nYNgbdKGulOVDFbM" async="true"></script>
-
+<a href="https://asciinema.org/a/nYNgbdKGulOVDFbM" target="_blank"><img src="https://asciinema.org/a/nYNgbdKGulOVDFbM.svg" /></a>
 
 ## Usage
 
