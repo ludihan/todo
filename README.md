@@ -4,6 +4,8 @@ todo is a tool for quick reminders and taking notes.
 
 <a href="https://asciinema.org/a/nYNgbdKGulOVDFbM" target="_blank"><img src="https://asciinema.org/a/nYNgbdKGulOVDFbM.svg" /></a>
 
+WARNING: this tool is mostly WIP but is quite usable and feature complete
+
 ## Usage
 
 Install the application and hit '?', it'll show all the keybinds for the program
