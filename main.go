@@ -84,7 +84,7 @@ var keys = keyMap{
 		key.WithHelp("N", "new note"),
 	),
 	ChangeNote: key.NewBinding(
-		key.WithKeys("c", "e"),
+		key.WithKeys("c", "e", "i", "a"),
 		key.WithHelp("c", "change note"),
 	),
 	DeleteNote: key.NewBinding(
@@ -128,7 +128,7 @@ var keys = keyMap{
 		key.WithHelp("?", "help"),
 	),
 	Quit: key.NewBinding(
-		key.WithKeys("q", "esc", "ctrl+c"),
+		key.WithKeys("q"),
 		key.WithHelp("q", "quit"),
 	),
 }
@@ -192,11 +192,10 @@ func createRootAndDefaultFile() (*os.Root, error) {
 	_, err = root.Stat(defaultFile)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			f, err := root.Create(defaultFile)
+			err := root.WriteFile(defaultFile, []byte{}, 0777)
 			if err != nil {
 				panic(err)
 			}
-			defer f.Close()
 		} else {
 			return nil, err
 		}
@@ -244,7 +243,9 @@ func (m model) Init() tea.Cmd {
 }
 
 func (m *model) saveFile() {
-	err := m.root.WriteFile(m.file, []byte(strings.Join(m.notes, "\n")+"\n"), 0777)
+	err := m.root.WriteFile(m.file, []byte(strings.TrimSpace(
+		strings.Join(m.notes, "\n")+"\n",
+	)), 0777)
 	if err != nil {
 		m.err = err
 	}
