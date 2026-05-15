@@ -2,9 +2,12 @@
 
 todo is a tool for quick reminders and taking notes.
 
+<script src="https://asciinema.org/a/nYNgbdKGulOVDFbM.js" id="asciicast-nYNgbdKGulOVDFbM" async="true"></script>
+
+
 ## Usage
 
-TODO
+Install the application and hit '?', it'll show all the keybinds for the program
 
 ## Installation
 ### Linux, Windows or Mac:
